@@ -1,0 +1,6 @@
+ngx_addon_name=ngx_http_fd_pass_module
+ngx_module_type=HTTP
+ngx_module_name=$ngx_addon_name
+ngx_module_srcs="$ngx_addon_dir/$ngx_module_name.c"
+
+. auto/module

@@ -1,0 +1,10 @@
+#!/usr/bin/make -f
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+CFLAGS += -Wall
+export CFLAGS
+
+include /usr/share/dpkg/architecture.mk
+
+%:
+	dh $@ --with nginx

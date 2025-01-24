@@ -1,0 +1,24 @@
+Source: libnginx-mod-http-fd-pass
+Section: httpd
+Priority: optional
+Maintainer: Bridge Technologies <info@bridgetech.tv>
+Build-Depends: debhelper-compat (= 13),
+               dh-sequence-nginx
+Standards-Version: 4.6.2
+Homepage: https://github.com/knneth/libnginx-mod-http-fd-pass
+Rules-Requires-Root: no
+
+Package: libnginx-mod-http-fd-pass
+Architecture: amd64
+Multi-Arch: no
+Depends: ${misc:Depends},
+         ${shlibs:Depends}
+Recommends: nginx
+Description: Nginx module for passing client HTTP(S) connections to another process
+ This module passes client HTTP(S) connections to another process using a
+ modified SCGI protocol over UNIX sockets, file descriptor passing, and
+ Kernel TLS (kTLS).
+ .
+ This module is suited for applications that accept demanding or long-lived
+ (WebSocket) connections from Nginx servers, as it allows the application to
+ bypass Nginx proxying when sending and receiving client traffic.

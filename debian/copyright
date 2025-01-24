@@ -1,0 +1,6 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+License: BSD-2-clause
+
+Files: *
+Copyright: 2025, Bridge Technologies Co AS
+License: BSD-2-clause
