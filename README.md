@@ -1,7 +1,7 @@
 # nginx http_fd_pass module
 
-libnginx-mod-http-fd-pass is a custom nginx module that forwards incoming client connections to another process using the [SCGI protocol](https://en.wikipedia.org/wiki/Simple_Common_Gateway_Interface).
-Uniquely, it sends the actual client file descriptor (FD) via an SCM_RIGHTS ancillary message along with the initial HTTP request headers.
+libnginx-mod-http-fd-pass is a custom [NGINX](https://github.com/nginx/nginx/) module that passes on incoming client connections to another process using an extended [SimpleCGI (SCGI) protocol](https://en.wikipedia.org/wiki/Simple_Common_Gateway_Interface).
+Uniquely, it sends the actual client file descriptor (FD) via an [`SCM_RIGHTS`](https://man7.org/linux/man-pages/man7/unix.7.html#:~:text=SCM_RIGHTS) ancillary message along with the initial HTTP request headers.
 
 ## How It Works
 
@@ -19,7 +19,7 @@ This setup effectively lets you implement advanced workflows in your SCGI-based 
 ## Features
 
 - SCGI Integration: Uses the SCGI protocol to transmit request headers to another process.
-- FD Handoff via `SCM_RIGHTS`: Passes the client’s socket descriptor to the backend, enabling direct control of the connection.
+- FD Handoff via `SCM_RIGHTS`: Passes the client’s file descriptor to the backend, enabling direct control of the connection.
 - Minimal Overhead: Once NGINX hands off the connection, it no longer processes subsequent data for the request (if HTTP or kTLS offload is used in both directions).
 - Simple Directives: `fd_pass` can be configured on specific locations, making it easy to enable or disable per context.
 
@@ -28,17 +28,16 @@ This setup effectively lets you implement advanced workflows in your SCGI-based 
 - SCGI-only: This module uses SCGI; it does not support FastCGI, environment variables, or other CGI interfaces.
 - Advanced Use Cases: Handing off the FD is powerful but also complex; ensure your SCGI backend can handle raw socket I/O.
 - TLS Support: For TLS connections, the module works best with kTLS enabled for both receiving and sending.
-  Otherwise, nginx must continue handling SSL/TLS on the connection. Consult the below support matrix.
+  Otherwise, nginx must continue handling SSL/TLS on the connection.
 
-| OpenSSL version | kTLS offloads for TLSv1.2 | kTLS offloads for TLSv1.3 |
-| --- | --- | --- |
-| 3.0, 3.1 | Encrypt and decrypt (full handover) | Encrypt only (partial socket handover from Nginx*) |
-| 3.2 and later | Encrypt and decrypt (full handover) | Encrypt and decrypt (full handover) |
-
-
-*) Specifically for OpenSSL versions _below_ 3.2, only sending is possible to offload for TLSv1.3 clients.
-For these clients, Nginx retains ownership of receiving and decrypting data from the client in user-space, and forwards the unencrypted data to the backend over UNIX socket.
+> [!NOTE]
+> Specifically for OpenSSL version 3.0 and 3.1, only sending is possible to offload for TLSv1.3 clients.
+For these clients, Nginx retains ownership of receiving and decrypting data from the client in user space, and forwards the decrypted data to the backend over UNIX socket.
 Still, the backend process will have ownership over sending data to the client since encryption uses Kernel TLS offload.
+> | OpenSSL version | kTLS offloads for TLSv1.2 | kTLS offloads for TLSv1.3 |
+> | --- | --- | --- |
+> | 3.0, 3.1 | Encrypt and decrypt (full handover) | Encrypt only (partial socket handover from nginx) |
+> | 3.2 and later | Encrypt and decrypt (full handover) | Encrypt and decrypt (full handover) |
 
 ## Installation
 
@@ -48,7 +47,7 @@ Building a module on Debian/Ubuntu:
 
 1. Clone the repository:
    ```
-   git clone https://github.com/knneth/libnginx-mod-http-fd-pass
+   git clone https://github.com/knneth/libnginx-mod-http-fd-pass.git
    cd libnginx-mod-http-fd-pass
    ```
 2. Build the package:
@@ -80,20 +79,11 @@ Alternatively, it can be compiled into the nginx server (embedded applications):
 
 ## Configuration
 
-To enable the module, add the `fd_pass` directive in the appropriate `location` block. For example:
+To enable the module, add the `fd_pass` directive in the appropriate `location` block in your site configuration. For example:
 
-```
-http {
-    server {
-        listen 80 default_server;
-        listen 443 ssl default_server;
-        ssl_protocols TLSv1.2 TLSv1.3;
-        server_name localhost;
-
-        location /fd_pass_test {
-            fd_pass unix:/run/scgi_fdpass.sock;
-        }
-    }
+```nginxconf
+location = /fd_pass_test {
+    fd_pass unix:/run/fd_pass_test.sock;
 }
 ```
 
@@ -101,7 +91,7 @@ http {
 
 Your SCGI backend must:
 - Receive the netstring-encoded SCGI headers from the UNIX domain socket.
-- Extract the client FD from the received ancillary data (SCM_RIGHTS).
+- Extract the client FD from the received ancillary data (`SCM_RIGHTS`).
 - Interact directly with the client socket. For HTTP, TLSv1.2, or when the SCGI header `KTLS_RX=0` is absent, you can continue reading or writing data to this FD as needed.
   - Only encryption is offloaded to kTLS when the SCGI header `KTLS_RX=0` is present.
     You can continue receiving data over the UNIX socket connection, but writing data must use the client FD.
@@ -113,8 +103,12 @@ We welcome contributions that enhance functionality, improve performance, or fix
 
 # License
 
-This project is licensed under the [MIT License](LICENSE). You are free to use, modify, and distribute this software in accordance with the terms of the license.
+This project is licensed under the [BSD 2-Clause "Simplified" License](LICENSE).
 
 # Maintainer
 
 - [knneth](https://github.com/knneth)
+
+# Future work
+
+The upstream NGINX project could introduce FD passing in their `ngx_http_scgi_module` module.
