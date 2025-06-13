@@ -99,6 +99,10 @@ ngx_http_fd_pass_handover(ngx_http_request_t *r, ngx_http_fd_pass_ctx_t *ctx)
     u_char        *server_end = server_buf + server_buflen;
     u_char        *server_last = server_buf;
 
+    if (server_buf == NULL) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+
     // Unlike spec-compliant SCGI, we never buffer the client request body prior to
     // establishing a connection to the backend. The backend will be responsible for
     // receiving it directly. We'll still put CONTENT_LENGTH=0 into the SCGI headers
