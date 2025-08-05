@@ -205,7 +205,7 @@ ngx_http_fd_pass_handover(ngx_http_request_t *r, ngx_http_fd_pass_ctx_t *ctx)
     }
 
     char           scgi_header[NGX_SIZE_T_LEN + 1];
-    char           control[CMSG_SPACE(sizeof(int))];
+    char           control[CMSG_SPACE(sizeof(int))] = {};
     const size_t   server_len = server_last - server_buf;
     struct iovec   iov[3];
     struct msghdr  msg = {
