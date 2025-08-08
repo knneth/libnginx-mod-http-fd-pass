@@ -1,4 +1,10 @@
-libnginx-mod-http-fd-pass (1.0.0-0) noble; urgency=low
+libnginx-mod-http-fd-pass (1.0.1) noble; urgency=low
+
+  * Disable lingering close for requests handled by this module.
+
+ -- Bridge Technologies <info@bridgetech.tv>  Fri, 8 Aug 2025 21:27:00 +0200
+
+libnginx-mod-http-fd-pass (1.0.0) noble; urgency=low
 
   * Compiled for Ubuntu 24.04 LTS.
 
