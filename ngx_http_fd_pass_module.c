@@ -67,7 +67,6 @@ typedef struct {
  * Request context.
  */
 typedef struct {
-    ngx_http_request_t    *request;
     ngx_peer_connection_t  peer;
 
     /**
@@ -258,16 +257,22 @@ ngx_http_fd_pass_handover(ngx_http_request_t *r, ngx_http_fd_pass_ctx_t *ctx)
  * @param ctx The fd_pass context to clean up.
  */
 static void
-ngx_http_fd_pass_cleanup(ngx_http_fd_pass_ctx_t *ctx)
+ngx_http_fd_pass_cleanup(ngx_http_request_t *r)
 {
+    ngx_http_fd_pass_ctx_t  *ctx = ngx_http_get_module_ctx(r, ngx_http_fd_pass_module);
+
+    if (!ctx) {
+        return;
+    }
+
+    ngx_http_set_ctx(r, NULL, ngx_http_fd_pass_module);
+
     if (ctx->peer.connection) {
         ngx_close_connection(ctx->peer.connection);
         ctx->peer.connection = NULL;
     }
-    if (ctx->request && ctx->request->blocked) {
-        ngx_http_request_t *r = ctx->request;
+    if (r->blocked) {
         ngx_connection_t *c = r->connection;
-        ctx->request = NULL;
         // See ngx_http_close_request()
         ngx_http_free_request(r, NGX_DONE);
         ngx_close_connection(c);
@@ -305,10 +310,11 @@ ngx_http_fd_pass_flush_to_backend(ngx_http_fd_pass_ctx_t *ctx)
  * Decrypts data read from the client and sends it to the backend.
  */
 static ngx_int_t
-ngx_http_fd_pass_relay_to_backend(ngx_http_fd_pass_ctx_t *ctx)
+ngx_http_fd_pass_relay_to_backend(ngx_http_request_t *r)
 {
-    ngx_int_t          rv;
-    ngx_connection_t  *c = ctx->request ? ctx->request->connection : NULL;
+    ngx_int_t                rv;
+    ngx_http_fd_pass_ctx_t  *ctx = ngx_http_get_module_ctx(r, ngx_http_fd_pass_module);
+    ngx_connection_t        *c = r->connection;
 
     if (c == NULL) {
         return NGX_ERROR;
@@ -353,10 +359,11 @@ static void
 ngx_http_fd_pass_compat_client_read_handler(ngx_event_t *rev)
 {
     ngx_connection_t        *c = rev->data;
-    ngx_http_fd_pass_ctx_t  *ctx = c->data;
+    ngx_http_request_t      *r = c->data;
+    ngx_http_fd_pass_ctx_t  *ctx = ngx_http_get_module_ctx(r, ngx_http_fd_pass_module);
 
-    if (ngx_http_fd_pass_relay_to_backend(ctx) == NGX_ERROR) {
-        ngx_http_fd_pass_cleanup(ctx);
+    if (ngx_http_fd_pass_relay_to_backend(r) == NGX_ERROR) {
+        ngx_http_fd_pass_cleanup(r);
         return;
     }
 
@@ -387,12 +394,12 @@ ngx_http_fd_pass_compat_client_write_handler(ngx_event_t *wev)
 static void
 ngx_http_fd_pass_compat_peer_write_handler(ngx_event_t *wev)
 {
-    ngx_connection_t        *peer = wev->data;
-    ngx_http_fd_pass_ctx_t  *ctx  = peer->data;
-    ngx_connection_t        *client = ctx->request ? ctx->request->connection : NULL;
+    ngx_connection_t    *peer = wev->data;
+    ngx_http_request_t  *r = peer->data;
+    ngx_connection_t    *client = r->connection;
 
-    if (ngx_http_fd_pass_relay_to_backend(ctx) == NGX_ERROR) {
-        ngx_http_fd_pass_cleanup(ctx);
+    if (ngx_http_fd_pass_relay_to_backend(r) == NGX_ERROR) {
+        ngx_http_fd_pass_cleanup(r);
         return;
     }
 
@@ -413,13 +420,13 @@ ngx_http_fd_pass_compat_peer_write_handler(ngx_event_t *wev)
 static void
 ngx_http_fd_pass_compat_peer_read_handler(ngx_event_t *rev)
 {
-    u_char                   buf[4096];
-    ssize_t                  num_recv_bytes = 0;
-    ssize_t                  num_send_bytes = 0;
-    ngx_int_t                n;
-    ngx_connection_t        *peer = rev->data;
-    ngx_http_fd_pass_ctx_t  *ctx = peer->data;
-    ngx_connection_t        *c = ctx->request ? ctx->request->connection : NULL;
+    u_char               buf[4096];
+    ssize_t              num_recv_bytes = 0;
+    ssize_t              num_send_bytes = 0;
+    ngx_int_t            n;
+    ngx_connection_t    *peer = rev->data;
+    ngx_http_request_t  *r = peer->data;
+    ngx_connection_t    *c = r->connection;
 
     while ((n = peer->recv(peer, buf, sizeof(buf))) > 0) {
         // Backend must under normal circumstances send using the client socket
@@ -452,7 +459,7 @@ ngx_http_fd_pass_compat_peer_read_handler(ngx_event_t *rev)
                           ", closing",
                           num_send_bytes, num_recv_bytes);
         }
-        ngx_http_fd_pass_cleanup(ctx);
+        ngx_http_fd_pass_cleanup(r);
         return;
     }
 
@@ -498,9 +505,11 @@ ngx_http_fd_pass_handler(ngx_http_request_t *r)
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
+    ngx_http_set_ctx(r, ctx, ngx_http_fd_pass_module);
+
     ngx_pool_cleanup_t  *cln = ngx_pool_cleanup_add(r->pool, 0);
     cln->handler = (ngx_pool_cleanup_pt)ngx_http_fd_pass_cleanup;
-    cln->data = ctx;
+    cln->data = r;
 
     ctx->peer.sockaddr = flcf->socket_addr->sockaddr;
     ctx->peer.socklen = flcf->socket_addr->socklen;
@@ -508,7 +517,7 @@ ngx_http_fd_pass_handler(ngx_http_request_t *r)
     ctx->peer.log_error = NGX_ERROR_ERR;
     ctx->peer.log = c->log;
     ctx->peer.get = ngx_event_get_peer;
-    ctx->peer.data = ctx;
+    ctx->peer.data = r;
 
     if (ngx_event_connect_peer(&ctx->peer) != NGX_OK) {
         ngx_log_error(NGX_LOG_ERR, c->log, 0, "Failed to connect to backend socket");
@@ -555,15 +564,13 @@ ngx_http_fd_pass_handler(ngx_http_request_t *r)
         ngx_reusable_connection(c, 0);
         r->blocked = 1;
         c->destroyed = 1;
-        ctx->request = r;
 
         // Set the client connection handlers
-        c->data = ctx;
         c->read->handler = ngx_http_fd_pass_compat_client_read_handler;
         c->write->handler = ngx_http_fd_pass_compat_client_write_handler;
 
         // Set the backend connection handlers
-        ctx->peer.connection->data = ctx;
+        ctx->peer.connection->data = r;
         ctx->peer.connection->read->handler =
             ngx_http_fd_pass_compat_peer_read_handler;
         ctx->peer.connection->write->handler =
