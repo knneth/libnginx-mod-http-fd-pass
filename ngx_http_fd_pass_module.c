@@ -13,6 +13,7 @@
 #define NGX_HTTP_FD_PASS_WITH_KTLS_TX_ONLY  199
 
 static char *ngx_http_fd_pass_set(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+static char *ngx_http_fd_pass_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child);
 static void *ngx_http_fd_pass_create_loc_conf(ngx_conf_t *cf);
 static ngx_int_t ngx_http_fd_pass_handler(ngx_http_request_t *r);
 
@@ -35,7 +36,7 @@ static ngx_http_module_t  ngx_http_fd_pass_module_ctx = {
     NULL,                           /* create server configuration */
     NULL,                           /* merge server configuration */
     ngx_http_fd_pass_create_loc_conf, /* create location configuration */
-    NULL,                           /* merge location configuration */
+    ngx_http_fd_pass_merge_loc_conf,  /* merge location configuration */
 };
 
 
@@ -635,6 +636,21 @@ ngx_http_fd_pass_set(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     flcf->socket_addr = &u.addrs[0];
     clcf->handler = ngx_http_fd_pass_handler;
+
+    return NGX_CONF_OK;
+}
+
+
+static char *
+ngx_http_fd_pass_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
+{
+    ngx_http_core_loc_conf_t  *clcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module);
+
+    if (clcf->handler == ngx_http_fd_pass_handler) {
+        // Disable lingering close for connections handled with fdpass. The
+        // connection ownership is transferred to the backend process.
+        clcf->lingering_close = NGX_HTTP_LINGERING_OFF;
+    }
 
     return NGX_CONF_OK;
 }
