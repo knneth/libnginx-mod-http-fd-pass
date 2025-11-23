@@ -1,3 +1,9 @@
+libnginx-mod-http-fd-pass (1.0.2) noble; urgency=low
+
+  * Fix memory leak.
+
+ -- Bridge Technologies <info@bridgetech.tv>  Sun, 23 Nov 2025 20:29:34 +0200
+
 libnginx-mod-http-fd-pass (1.0.1) noble; urgency=low
 
   * Disable lingering close for requests handled by this module.
