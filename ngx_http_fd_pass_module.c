@@ -276,7 +276,7 @@ ngx_http_fd_pass_cleanup(ngx_http_request_t *r)
         ngx_connection_t *c = r->connection;
         // See ngx_http_close_request()
         ngx_http_free_request(r, NGX_DONE);
-        ngx_close_connection(c);
+        ngx_http_close_connection(c);
     }
 }
 
