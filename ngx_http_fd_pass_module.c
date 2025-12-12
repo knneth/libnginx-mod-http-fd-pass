@@ -162,12 +162,16 @@ ngx_http_fd_pass_handover(ngx_http_request_t *r, ngx_http_fd_pass_ctx_t *ctx)
 
     /* Prepare headers */
     size_t            headers_size = 0;
-    ngx_list_part_t  *part = &r->headers_in.headers.part;
-    ngx_table_elt_t  *headers = part->elts;
+    ngx_list_part_t  *part = NULL;
 
-    // @TODO: Combine headers with identical names as required by the SCGI specification
-    for (ngx_uint_t i = 0; i < part->nelts; i++) {
-        headers_size += strlen("HTTP_") + headers[i].key.len + 1 + headers[i].value.len + 1;
+    // @TODO: Use ngx_http_link_multi_headers() to combine headers with identical
+    // names as required by the SCGI specification.
+    for (part = &r->headers_in.headers.part; part; part = part->next) {
+        ngx_table_elt_t *headers = part->elts;
+
+        for (ngx_uint_t i = 0; i < part->nelts; i++) {
+            headers_size += strlen("HTTP_") + headers[i].key.len + 1 + headers[i].value.len + 1;
+        }
     }
 
     // Final terminator
@@ -181,20 +185,24 @@ ngx_http_fd_pass_handover(ngx_http_request_t *r, ngx_http_fd_pass_ctx_t *ctx)
     u_char  *headers_end = headers_buf + headers_size;
     u_char  *headers_last = headers_buf;
 
-    for (ngx_uint_t i = 0; i < part->nelts; i++) {
-        headers_last = ngx_cpymem(headers_last, "HTTP_", strlen("HTTP_"));
-        for (size_t n = 0; n < headers[i].key.len; n++) {
-            u_char ch = headers[i].key.data[n];
-            if (ch == '-') {
-                ch = '_';
-            } else {
-                ch = ngx_toupper(ch);
+    for (part = &r->headers_in.headers.part; part; part = part->next) {
+        ngx_table_elt_t *headers = part->elts;
+
+        for (ngx_uint_t i = 0; i < part->nelts; i++) {
+            headers_last = ngx_cpymem(headers_last, "HTTP_", strlen("HTTP_"));
+            for (size_t n = 0; n < headers[i].key.len; n++) {
+                u_char ch = headers[i].key.data[n];
+                if (ch == '-') {
+                    ch = '_';
+                } else {
+                    ch = ngx_toupper(ch);
+                }
+                *headers_last++ = ch;
             }
-            *headers_last++ = ch;
+            *headers_last++ = '\0';
+            headers_last = ngx_cpymem(headers_last, headers[i].value.data, headers[i].value.len);
+            *headers_last++ = '\0';
         }
-        *headers_last++ = '\0';
-        headers_last = ngx_cpymem(headers_last, headers[i].value.data, headers[i].value.len);
-        *headers_last++ = '\0';
     }
 
     *headers_last++ = ',';
