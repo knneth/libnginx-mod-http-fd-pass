@@ -1,3 +1,9 @@
+libnginx-mod-http-fd-pass (1.0.3) noble; urgency=low
+
+  * Increase the number of supported request headers.
+
+ -- Bridge Technologies <info@bridgetech.tv>  Fri, 12 Dec 2025 15:42:00 +0200
+
 libnginx-mod-http-fd-pass (1.0.2) noble; urgency=low
 
   * Fix memory leak.
