@@ -350,6 +350,9 @@ ngx_http_fd_pass_relay_to_backend(ngx_http_request_t *r)
                 // backend is writable.
                 return rv;
             }
+        } else if (n == 0) {
+            // EOF
+            return NGX_ERROR;
         } else {
             return n;
         }
@@ -371,13 +374,21 @@ ngx_http_fd_pass_compat_client_read_handler(ngx_event_t *rev)
     ngx_http_request_t      *r = c->data;
     ngx_http_fd_pass_ctx_t  *ctx = ngx_http_get_module_ctx(r, ngx_http_fd_pass_module);
 
+    if (rev->eof || rev->error) {
+        ngx_http_fd_pass_cleanup(r);
+        return;
+    }
+
     if (ngx_http_fd_pass_relay_to_backend(r) == NGX_ERROR) {
         ngx_http_fd_pass_cleanup(r);
         return;
     }
 
-    ngx_handle_read_event(rev, 0);
-    ngx_handle_write_event(ctx->peer.connection->write, 0);
+    if (ngx_handle_read_event(rev, 0) == NGX_ERROR ||
+        ngx_handle_write_event(ctx->peer.connection->write, 0) == NGX_ERROR) {
+        ngx_http_fd_pass_cleanup(r);
+        return;
+    }
 }
 
 
@@ -406,14 +417,23 @@ ngx_http_fd_pass_compat_peer_write_handler(ngx_event_t *wev)
     ngx_connection_t    *peer = wev->data;
     ngx_http_request_t  *r = peer->data;
     ngx_connection_t    *client = r->connection;
+    ngx_event_t         *crev = client->read;
+
+    if (wev->error || crev->eof || crev->error) {
+        ngx_http_fd_pass_cleanup(r);
+        return;
+    }
 
     if (ngx_http_fd_pass_relay_to_backend(r) == NGX_ERROR) {
         ngx_http_fd_pass_cleanup(r);
         return;
     }
 
-    ngx_handle_read_event(client->read, 0);
-    ngx_handle_write_event(wev, 0);
+    if (ngx_handle_read_event(crev, 0) == NGX_ERROR ||
+        ngx_handle_write_event(wev, 0) == NGX_ERROR) {
+        ngx_http_fd_pass_cleanup(r);
+        return;
+    }
 }
 
 
@@ -461,7 +481,7 @@ ngx_http_fd_pass_compat_peer_read_handler(ngx_event_t *rev)
         }
     }
 
-    if (n == NGX_ERROR || rev->eof) {
+    if (n == NGX_ERROR || rev->eof || rev->error) {
         if (num_recv_bytes) {
             ngx_log_error(NGX_LOG_ERR, c->log, 0,
                           "fd_pass: %z/%z bytes relayed from backend to client"
@@ -472,7 +492,10 @@ ngx_http_fd_pass_compat_peer_read_handler(ngx_event_t *rev)
         return;
     }
 
-    ngx_handle_read_event(rev, 0);
+    if (ngx_handle_read_event(rev, 0) == NGX_ERROR) {
+        ngx_http_fd_pass_cleanup(r);
+        return;
+    }
 }
 
 
