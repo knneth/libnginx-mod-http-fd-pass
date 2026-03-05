@@ -1,0 +1,24 @@
+#!/bin/sh
+
+set -e
+
+case "$1" in
+  configure)
+    # When performing a package upgrade via apt with a custom configuration:
+    if [ -n "${2:-}" ] && [ -n "${APT_CONFIG:-}" ]; then
+      # Assume to be running inside a TEA file upgrade, and that a reload will be
+      # insufficient. We must ensure nginx is restarted to load the new module code.
+      if command -v systemctl >/dev/null 2>&1; then
+        if command -v deb-systemd-invoke >/dev/null 2>&1; then
+          if systemctl is-active --quiet nginx.service; then
+            deb-systemd-invoke try-restart nginx.service ||:
+          fi
+        fi
+      fi
+    fi
+  ;;
+esac
+
+#DEBHELPER#
+
+exit 0
