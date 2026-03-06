@@ -1,3 +1,9 @@
+libnginx-mod-http-fd-pass (1.0.4) noble; urgency=low
+
+  * Improve the reliability of handling connection EOF or error.
+
+ -- Bridge Technologies <info@bridgetech.tv>  Thu, 6 Mar 2026 15:08:00 +0100
+
 libnginx-mod-http-fd-pass (1.0.3) noble; urgency=low
 
   * Increase the number of supported request headers.
