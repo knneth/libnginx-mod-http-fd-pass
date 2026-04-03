@@ -482,7 +482,7 @@ ngx_http_fd_pass_compat_peer_read_handler(ngx_event_t *rev)
     }
 
     if (n == NGX_ERROR || rev->eof || rev->error) {
-        if (num_recv_bytes) {
+        if (num_recv_bytes && c) {
             ngx_log_error(NGX_LOG_ERR, c->log, 0,
                           "fd_pass: %z/%z bytes relayed from backend to client"
                           ", closing",
